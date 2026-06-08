@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PatriotsMessenger</string>
+    <string name="title_activity_main">PatriotsMessenger</string>
+    <string name="package_name">com.authflow.patriotsmessenger</string>
+    <string name="custom_url_scheme">com.authflow.patriotsmessenger</string>
+</resources>
