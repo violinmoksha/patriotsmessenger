@@ -1,9 +1,11 @@
 import { AuthPanel } from "@/components/auth-panel"
 import { PatriotsMessenger } from "@/components/patriots-messenger"
+import { StatusBarSetup } from "@/components/status-bar-setup"
 
 export default function Home() {
   return (
     <>
+      <StatusBarSetup />
       <header className="site-header">
         <div>
           <p className="eyebrow">Private by design</p>

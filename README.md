@@ -29,6 +29,8 @@ cd android
 ./gradlew assembleDebug
 ```
 
+`npm run cap:sync` builds the web bundle with `.env.production` so APKs use production service endpoints instead of `.env.local`.
+
 To open the project in Android Studio:
 
 ```sh

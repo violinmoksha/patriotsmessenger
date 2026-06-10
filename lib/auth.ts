@@ -31,6 +31,10 @@ function normalizeBaseUrl(value: string) {
   return value.replace(/\/$/, "")
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_AUTHFLOW_API_URL || "https://api.authflow.net"
 
@@ -125,6 +129,7 @@ class AuthFlowClient {
       email,
       password,
       fullname,
+      username: username.replace(/^@+/, "").trim(),
       role: "user",
       api_key: this.apiKey,
       disclaimed: "true",
@@ -247,7 +252,12 @@ export async function signIn(email: string, password: string) {
   notifyListeners()
 
   try {
-    const user = await authFlowClient.signIn(email, password)
+    const signedInUser = await authFlowClient.signIn(email, password)
+    const profile = await syncUser(signedInUser.email, signedInUser.fullname || signedInUser.email, signedInUser.username)
+    const user = {
+      ...signedInUser,
+      username: profile.username || signedInUser.username,
+    }
 
     authState = { user, isAuthenticated: true, isLoading: false }
     setCookie(COOKIE_NAME, JSON.stringify(user))
@@ -266,8 +276,19 @@ export async function signUp(email: string, password: string, fullname: string, 
   notifyListeners()
 
   try {
-    const user = await authFlowClient.signUp(email, password, fullname, username)
-    await syncUser(user.email, user.fullname || user.email, username)
+    const cleanUsername = username.replace(/^@+/, "").trim()
+    const signedUpUser = await authFlowClient.signUp(email, password, fullname, cleanUsername)
+    let user = signedUpUser
+
+    try {
+      const profile = await syncUser(signedUpUser.email, signedUpUser.fullname || signedUpUser.email, cleanUsername)
+      user = {
+        ...signedUpUser,
+        username: profile.username || cleanUsername,
+      }
+    } catch (error) {
+      throw new Error(`Your AuthFlow account was created, but Patriots Voice profile sync failed: ${getErrorMessage(error, "Unknown sync error.")}`)
+    }
 
     authState = { user, isAuthenticated: true, isLoading: false }
     setCookie(COOKIE_NAME, JSON.stringify(user))

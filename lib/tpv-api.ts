@@ -10,13 +10,25 @@ function getApiBaseUrl() {
 }
 
 async function request<T>(path: string, init: RequestInit = {}) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init.headers || {}) },
-    cache: "no-store",
-  })
+  const url = `${getApiBaseUrl()}${path}`
+  let response: Response
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+      cache: "no-store",
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown network error."
+    throw new Error(`Unable to reach The Patriots Voice API at ${url}: ${message}`)
+  }
+
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(typeof payload.message === "string" ? payload.message : "The Patriots Voice API request failed.")
+  if (!response.ok) {
+    const message = typeof payload.message === "string" ? payload.message : "The Patriots Voice API request failed."
+    throw new Error(`The Patriots Voice API request failed (${response.status} ${response.statusText}): ${message}`)
+  }
   return payload as T
 }
 

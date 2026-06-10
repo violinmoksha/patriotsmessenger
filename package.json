@@ -5,12 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:apk": "node scripts/build-with-env.cjs .env.production",
     "start": "next start",
     "lint": "eslint",
     "export": "next build",
     "cap:add:ios": "cap add ios",
     "cap:add:android": "cap add android",
-    "cap:sync": "npm run build && cap sync",
+    "cap:sync": "npm run build:apk && cap sync",
     "cap:open:ios": "cap open ios",
     "cap:open:android": "cap open android"
   },
@@ -18,6 +19,7 @@
     "@capacitor/android": "^7.4.4",
     "@capacitor/core": "^7.4.4",
     "@capacitor/ios": "^7.4.4",
+    "@capacitor/status-bar": "^7.0.6",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
