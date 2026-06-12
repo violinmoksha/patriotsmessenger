@@ -1,10 +1,12 @@
 import type { DirectMessage, FeedPost, Forum, ForumPost, MessengerCiphertext, MessengerEnvelope, MessengerKey, PublicUser } from "@/lib/types"
 
+const REQUEST_TIMEOUT_MS = 15000
+
 function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_THEPATRIOTSVOICE_API_URL
   if (configured) return configured.replace(/\/+$/, "")
   if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-    return "http://127.0.0.1:5001/thepatriotsvoice/us-central1/api"
+    return "http://127.0.0.1:5001/the-patriots-voice/us-central1/api"
   }
   return "https://us-central1-the-patriots-voice.cloudfunctions.net/api"
 }
@@ -12,16 +14,23 @@ function getApiBaseUrl() {
 async function request<T>(path: string, init: RequestInit = {}) {
   const url = `${getApiBaseUrl()}${path}`
   let response: Response
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
     response = await fetch(url, {
       ...init,
       headers: { "Content-Type": "application/json", ...(init.headers || {}) },
       cache: "no-store",
+      signal: controller.signal,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown network error."
+    const message = error instanceof Error && error.name === "AbortError"
+      ? `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`
+      : error instanceof Error ? error.message : "Unknown network error."
     throw new Error(`Unable to reach The Patriots Voice API at ${url}: ${message}`)
+  } finally {
+    window.clearTimeout(timeout)
   }
 
   const payload = await response.json().catch(() => ({}))

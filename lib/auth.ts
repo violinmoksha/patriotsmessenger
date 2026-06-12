@@ -35,6 +35,10 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function isEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
 function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_AUTHFLOW_API_URL || "https://api.authflow.net"
 
@@ -144,8 +148,12 @@ class AuthFlowClient {
 
   async signIn(identifier: string, password: string): Promise<AuthUser> {
     const cleanIdentifier = identifier.trim()
-    const resolved = cleanIdentifier.startsWith("@") ? await resolveLoginIdentifier(cleanIdentifier) : null
-    const email = resolved?.email || cleanIdentifier
+    const isEmail = isEmailAddress(cleanIdentifier)
+    const resolved = isEmail ? null : await resolveLoginIdentifier(cleanIdentifier)
+    const email = isEmail ? cleanIdentifier : resolved?.email
+    if (!email) {
+      throw new Error("Username was found, but no AuthFlow email is linked to it.")
+    }
     const foobar = await this.createFooBarToken(email)
 
     const login = await this.request("/auth/login", {

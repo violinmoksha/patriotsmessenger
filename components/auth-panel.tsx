@@ -58,7 +58,7 @@ export function AuthPanel() {
             </label>
             <label>
               Username
-              <input autoComplete="username" onChange={(event) => setUsername(event.target.value.replace(/^@+/, ""))} pattern="[A-Za-z0-9_][A-Za-z0-9_.-]{2,29}" placeholder="@someid" required type="text" value={username} />
+              <input autoComplete="username" onChange={(event) => setUsername(event.target.value.replace(/^@+/, ""))} pattern="[A-Za-z0-9_][A-Za-z0-9_.\-]{2,29}" placeholder="@someid" required type="text" value={username} />
             </label>
           </>
         ) : null}

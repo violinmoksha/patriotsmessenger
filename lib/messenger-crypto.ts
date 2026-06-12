@@ -28,16 +28,24 @@ function storageKey(userId: string) {
   return `${KEY_PREFIX}:${userId.toLowerCase()}`
 }
 
+function requireWebCrypto() {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure WebCrypto is unavailable in this app context.")
+  }
+
+  return globalThis.crypto.subtle
+}
+
 async function importPrivateKey(jwk: JsonWebKey) {
-  return crypto.subtle.importKey("jwk", jwk, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"])
+  return requireWebCrypto().importKey("jwk", jwk, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"])
 }
 
 async function importPublicKey(jwk: JsonWebKey) {
-  return crypto.subtle.importKey("jwk", jwk, { name: "ECDH", namedCurve: "P-256" }, true, [])
+  return requireWebCrypto().importKey("jwk", jwk, { name: "ECDH", namedCurve: "P-256" }, true, [])
 }
 
 async function deriveAesKey(privateKey: CryptoKey, publicKey: CryptoKey) {
-  return crypto.subtle.deriveKey(
+  return requireWebCrypto().deriveKey(
     { name: "ECDH", public: publicKey },
     privateKey,
     { name: "AES-GCM", length: 256 },
@@ -47,27 +55,29 @@ async function deriveAesKey(privateKey: CryptoKey, publicKey: CryptoKey) {
 }
 
 export async function getOrCreateMessengerIdentity(userId: string) {
+  const subtle = requireWebCrypto()
   const stored = localStorage.getItem(storageKey(userId))
   if (stored) {
     const parsed = JSON.parse(stored) as { publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey }
     return parsed
   }
 
-  const keyPair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"])
-  const publicKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey)
-  const privateKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey)
+  const keyPair = await subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"])
+  const publicKeyJwk = await subtle.exportKey("jwk", keyPair.publicKey)
+  const privateKeyJwk = await subtle.exportKey("jwk", keyPair.privateKey)
   const identity = { publicKeyJwk, privateKeyJwk }
   localStorage.setItem(storageKey(userId), JSON.stringify(identity))
   return identity
 }
 
 export async function encryptForRecipient(publicKeyJwk: JsonWebKey, plaintext: string): Promise<MessengerCiphertext> {
+  const subtle = requireWebCrypto()
   const recipientPublicKey = await importPublicKey(publicKeyJwk)
-  const ephemeral = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"])
+  const ephemeral = await subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"])
   const aesKey = await deriveAesKey(ephemeral.privateKey, recipientPublicKey)
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoder.encode(plaintext))
-  const ephemeralPublicKeyJwk = await crypto.subtle.exportKey("jwk", ephemeral.publicKey)
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+  const encrypted = await subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoder.encode(plaintext))
+  const ephemeralPublicKeyJwk = await subtle.exportKey("jwk", ephemeral.publicKey)
 
   return {
     algorithm: ALGORITHM,
@@ -78,10 +88,11 @@ export async function encryptForRecipient(publicKeyJwk: JsonWebKey, plaintext: s
 }
 
 export async function decryptFromEnvelope(privateKeyJwk: JsonWebKey, envelope: MessengerCiphertext) {
+  const subtle = requireWebCrypto()
   const privateKey = await importPrivateKey(privateKeyJwk)
   const ephemeralPublicKey = await importPublicKey(envelope.ephemeral_public_key_jwk)
   const aesKey = await deriveAesKey(privateKey, ephemeralPublicKey)
-  const decrypted = await crypto.subtle.decrypt(
+  const decrypted = await subtle.decrypt(
     { name: "AES-GCM", iv: fromBase64(envelope.iv) },
     aesKey,
     fromBase64(envelope.ciphertext),

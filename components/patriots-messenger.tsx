@@ -16,6 +16,11 @@ async function decryptMessage(message: MessengerEnvelope, privateKeyJwk: JsonWeb
   return { ...message, plaintext: await decryptFromEnvelope(privateKeyJwk, ciphertext) }
 }
 
+async function decryptMessages(messages: MessengerEnvelope[], privateKeyJwk: JsonWebKey): Promise<DisplayMessage[]> {
+  const decrypted = await Promise.allSettled(messages.map((message) => decryptMessage(message, privateKeyJwk)))
+  return decrypted.flatMap((result) => result.status === "fulfilled" ? [result.value] : [])
+}
+
 export function PatriotsMessenger({ standalone = false }: { standalone?: boolean }) {
   const { user, isAuthenticated } = useAuth()
   const [users, setUsers] = useState<PublicUser[]>([])
@@ -45,23 +50,40 @@ export function PatriotsMessenger({ standalone = false }: { standalone?: boolean
     async function load() {
       try {
         setError(null)
+        setStatus("Syncing profile...")
         const profile = await syncUser(authUser.email, authUser.fullname || authUser.email, authUser.username)
-        const [contacts, encryptedMessages] = await Promise.all([
-          getMessengerContacts(profile.id),
-          getMessengerMessages(authUser.email),
-        ])
         if (cancelled) return
 
+        setStatus("Loading contacts...")
+        const contacts = await getMessengerContacts(profile.id)
+        if (cancelled) return
+
+        setStatus("Loading messages...")
+        const encryptedMessages = await getMessengerMessages(authUser.email)
+        if (cancelled) return
+
+        setStatus("Preparing encryption keys...")
         const identity = await getOrCreateMessengerIdentity(authUser.email)
         identityRef.current = identity
+        if (cancelled) return
+
+        setStatus("Publishing encryption key...")
         await publishMessengerKey(authUser.email, identity.publicKeyJwk)
-        const decryptedMessages = await Promise.all(encryptedMessages.map((message) => decryptMessage(message, identity.privateKeyJwk)))
+        if (cancelled) return
+
+        setStatus("Decrypting messages...")
+        const decryptedMessages = await decryptMessages(encryptedMessages, identity.privateKeyJwk)
+        if (cancelled) return
 
         setOwnPublicId(profile.id)
         setOwnHandle(profile.handle || "")
         setUsers(contacts.filter((entry) => entry.id !== profile.id))
         setMessages(decryptedMessages)
-        setStatus("End-to-end encryption ready.")
+        setStatus(
+          decryptedMessages.length === encryptedMessages.length
+            ? "End-to-end encryption ready."
+            : "End-to-end encryption ready. Older undecryptable messages were skipped.",
+        )
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to prepare PatriotsMessenger.")
       }
@@ -84,13 +106,25 @@ export function PatriotsMessenger({ standalone = false }: { standalone?: boolean
   useEffect(() => {
     if (!ownPublicId || !identityRef.current) return
     socketRef.current?.close()
-    socketRef.current = connectPatriotsMessengerSocket(ownPublicId, (rawMessage) => {
-      const socketEnvelope = rawMessage as MessengerEnvelope
-      const envelope = { ...socketEnvelope, is_mine: socketEnvelope.sender_id === ownPublicId }
-      void decryptMessage(envelope, identityRef.current?.privateKeyJwk || {}).then((message) => {
-        setMessages((current) => current.some((entry) => entry.id === message.id) ? current : [...current, message])
-      }).catch(() => undefined)
-    })
+    socketRef.current = connectPatriotsMessengerSocket(
+      ownPublicId,
+      (rawMessage) => {
+        const socketEnvelope = rawMessage as MessengerEnvelope
+        const envelope = { ...socketEnvelope, is_mine: socketEnvelope.sender_id === ownPublicId }
+        void decryptMessage(envelope, identityRef.current?.privateKeyJwk || {}).then((message) => {
+          setMessages((current) => current.some((entry) => entry.id === message.id) ? current : [...current, message])
+        }).catch(() => {
+          setStatus("Received an undecryptable message and skipped it.")
+        })
+      },
+      (socketStatus) => {
+        if (socketStatus.status === "connecting") setStatus(`Connecting realtime socket: ${socketStatus.detail}`)
+        if (socketStatus.status === "open") setStatus("Realtime socket open.")
+        if (socketStatus.status === "message" && socketStatus.detail) setStatus(`Realtime socket: ${socketStatus.detail}`)
+        if (socketStatus.status === "closed") setStatus(`Realtime socket closed: ${socketStatus.detail || "unknown"}`)
+        if (socketStatus.status === "error") setError(`Realtime socket error: ${socketStatus.detail || "unknown"}`)
+      },
+    )
 
     return () => {
       socketRef.current?.close()
