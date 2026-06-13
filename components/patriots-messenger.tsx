@@ -118,10 +118,10 @@ export function PatriotsMessenger({ standalone = false }: { standalone?: boolean
         })
       },
       (socketStatus) => {
-        if (socketStatus.status === "connecting") setStatus(`Connecting realtime socket: ${socketStatus.detail}`)
+        if (socketStatus.status === "connecting") setStatus(`Connecting realtime socket...`) //: ${socketStatus.detail}`)
         if (socketStatus.status === "open") setStatus("Realtime socket open.")
         if (socketStatus.status === "message" && socketStatus.detail) setStatus(`Realtime socket: ${socketStatus.detail}`)
-        if (socketStatus.status === "closed") setStatus(`Realtime socket closed: ${socketStatus.detail || "unknown"}`)
+        if (socketStatus.status === "closed") setStatus(`Realtime socket closed.`) //: ${socketStatus.detail || "unknown"}`)
         if (socketStatus.status === "error") setError(`Realtime socket error: ${socketStatus.detail || "unknown"}`)
       },
     )
